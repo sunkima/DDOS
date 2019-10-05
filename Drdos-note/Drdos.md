@@ -46,7 +46,7 @@ bit(6-8):0(保留)，1(主动对等体模式)，2(被动对等体模式)，3(客
   - 利用型的发包最好使用C\C++等高性能的语言，我使用了Golang，因为其性能相对于python较好且开发速度较快（之后可能会用C\C++重写吧！）
 
 - 下面是我写出相关脚本
-    [Server端demo脚本]("../scripts/server.py")
+    [Server端demo脚本]("https://github.com/chriskaliX/DDOS/blob/master/Drdos-note/script/discover/server.py")
 
 ### 防御
 
