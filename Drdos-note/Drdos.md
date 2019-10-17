@@ -5,6 +5,7 @@
 ## NTP
 
 > 协议简介：NTP协议(Network Time Protocol)，是用来同步网络中各个计算机时间的协议。
+
 > 利用原理：NTP协议中Monlist指令，可以向目标NTP服务器查询进行过同步的最新600个IP，从而达到了放大攻击的效果。
 
 ### 实验分析
@@ -45,16 +46,8 @@ bit(6-8):0(保留)，1(主动对等体模式)，2(被动对等体模式)，3(客
   - 验证型的发包可以用python的scapy构包，或者构造原生UDP发包。
   - 利用型的发包最好使用C\C++等高性能的语言，我使用了Golang，因为其性能相对于python较好且开发速度较快（之后可能会用C\C++重写吧！）
 
-- 下面是我写出相关脚本
-    [Server端demo脚本](https://github.com/chriskaliX/DDOS/blob/master/Drdos-note/script/discover/server.py)
-
-### 防御
-
-> 防御为防止自己的NTP服务被他人利用，方法不限于以下的几种
-
-- 关闭monlist查询（较为极端）
-- 升级NTP服务
-- 设置Iptables
+- 检测的server端脚本
+  - [Server端demo脚本](https://github.com/chriskaliX/DDOS/blob/master/Drdos-note/script/discover/server.py)
 
 ### 参考
 
@@ -63,3 +56,62 @@ bit(6-8):0(保留)，1(主动对等体模式)，2(被动对等体模式)，3(客
   - [Metasploit : ntp_monlist.rb](https://github.com/rapid7/metasploit-framework/blob/master/modules/auxiliary/scanner/ntp/ntp_monlist.rb)
 - 其他文章
   - [NTP攻击反射复现](https://www.freebuf.com/articles/network/129288.html)
+
+## DNS
+
+> 协议简介：它作为将域名和IP地址相互映射的一个分布式数据库，能够使人更方便地访问互联网。
+
+> 利用原理：通过伪造IP源，对DNS服务器进行查询，返回较大的数据包从而达到放大攻击的效果
+
+### 实验分析
+
+- 找到一个DNS服务器，使用 `tcpdump host xx.xx.xx.xx -w dns.pcap` 抓取特定IP的DNS数据包。在linux上输入`dig any isc.org @xx.xx.xx.xx` 截图如下：
+![Image text](img/dns/dns_dig_query.png)
+图中的放大倍数较小，这与目标IP本身存在一定关系
+
+- 查询了dig服务默认是使用udp的，但是本次的都是TCP流量包。于是用metasploit中的检测模块重新抓包一次，截图如下：
+![Image text](img/dns/dns_metasploit_query.png)
+放大倍数在14倍左右。
+
+- 具体的报文如下所示：
+![Image text](img/dns/dns_wireshark.png)
+其中有：
+<br>QR(1bit)：0为查询报文，1为响应报文
+<br>Opcode(4bits)：0为标准查询，1为反向查询，2为服务器状态请求
+<br>AA(1bit)：授权回答（包里没有）
+<br>Truncated(1bit)：可截断，设为1代表返回超过512时只返回前512
+<br>Recuried(1bit)：1为递归查询
+<br>RA(1bit)：可用递归
+<br>Rcode(4bits)：返回码，0代表没有错误
+<br>
+<br>Questions：查询问题区域节的数量
+<br>Answers RRs：回答区域的数量
+<br>Authoritative RRs：授权区域数目
+<br>Additional RRs：附加区域的数量
+<br>
+<br>**正文部分**
+
+![Image text](img/dns/dns.png)
+
+这里请求的是`com`，`metasploit中自带是的isc.org`。其中报文中0x03,0x63,0x6f,0x6d,0x00。0x03代表长度是3，0x63,0x6f,0x6d代表com，0x00为终止符。
+<br>\x00\xff代表查询的是ANY，最后的\x00\x01，对于Internet查询类，总是IN
+
+### 自动化思路
+
+> 在metasploit中检测的关键字为`@msearch_probe = "\x09\x8d\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00" + targdomainpacket + "\x00\x00" + querypacket + "\x00\x01"
+  end`，其中targetdomainpacket是查询的域名，querypacket是查询的类型。
+
+> 可固定payload为：
+`"\x09\x8d\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x03\x63\0x6f\x6d\x00\x00\xff\x00\x01"`
+
+- 筛选与利用：
+  - 思路同样，填充至UDP包的data字段，使用脚本或者metasploit下`/auxiliary/scanner/dns/dns_amp`进行快速的校验或者简单的自动化
+  - 想要更高的效果，提高代码中对length判断的值
+
+- 检测server端脚本
+  - [Server端demo脚本](https://github.com/chriskaliX/DDOS/blob/master/Drdos-note/script/discover/server.py)
+
+### 参考
+
+- [DNS协议](https://wenku.baidu.com/view/94004323dcccda38376baf1ffc4ffe473368fd36.html)
+- [Metasploit检测脚本](https://github.com/rapid7/metasploit-framework/blob/master/modules/auxiliary/scanner/dns/dns_amp.rb)
